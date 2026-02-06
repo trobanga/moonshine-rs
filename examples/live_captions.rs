@@ -12,7 +12,7 @@ const MAX_LINE_LENGTH: usize = 80;
 
 fn main() {
     let args: Vec<String> = env::args().collect();
-    let model_name = args.get(1).map(|s| s.as_str()).unwrap_or("moonshine/tiny");
+    let model_name = args.get(1).map(|s| s.as_str()).unwrap_or("moonshine/base");
 
     println!("Loading Moonshine model '{model_name}' (using ONNX runtime)...");
 

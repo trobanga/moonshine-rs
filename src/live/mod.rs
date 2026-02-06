@@ -24,7 +24,7 @@ pub const SAMPLE_RATE: u32 = 16000;
 pub const CHUNK_SIZE: usize = 512;
 
 /// Number of lookback chunks to keep before speech detection.
-pub const LOOKBACK_CHUNKS: usize = 5;
+pub const LOOKBACK_CHUNKS: usize = 15;
 
 /// Maximum speech duration in seconds before forced transcription.
 pub const MAX_SPEECH_SECS: f32 = 15.0;
