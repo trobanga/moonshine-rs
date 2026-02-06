@@ -126,7 +126,10 @@ impl Vad {
     ///
     /// # Arguments
     /// * `threshold` - Speech probability threshold (0.0 to 1.0). Recommended: 0.5
-    pub fn new(threshold: f32) -> Result<Self> {
+    /// * `min_silence_ms` - Minimum silence duration (ms) before speech-end is confirmed
+    /// * `neg_threshold_offset` - How far below `threshold` the probability must drop
+    ///   to begin the silence timer (clamped so neg_threshold >= 0.01)
+    pub fn new(threshold: f32, min_silence_ms: u32, neg_threshold_offset: f32) -> Result<Self> {
         if !(0.0..=1.0).contains(&threshold) {
             return Err(MoonshineError::Audio(
                 "VAD threshold must be between 0.0 and 1.0".to_string(),
@@ -137,17 +140,14 @@ impl Vad {
         let model_path = download_silero_vad()?;
         let model = SileroModel::from_path(&model_path)?;
 
-        // At 16kHz with 512 chunk size, each chunk is ~32ms
-        let min_silence_ms = 300;
-
         Ok(Self {
             model,
             threshold,
-            neg_threshold: (threshold - 0.15).max(0.01),
+            neg_threshold: (threshold - neg_threshold_offset).max(0.01),
             triggered: false,
             temp_end_samples: None,
             current_sample: 0,
-            min_silence_samples: SAMPLE_RATE as usize * min_silence_ms / 1000,
+            min_silence_samples: SAMPLE_RATE as usize * min_silence_ms as usize / 1000,
         })
     }
 
@@ -238,19 +238,19 @@ mod tests {
 
     #[test]
     fn test_vad_creation() {
-        let vad = Vad::new(0.5).unwrap();
+        let vad = Vad::new(0.5, 300, 0.15).unwrap();
         assert!(!vad.is_triggered());
     }
 
     #[test]
     fn test_vad_invalid_threshold() {
-        assert!(Vad::new(1.5).is_err());
-        assert!(Vad::new(-0.1).is_err());
+        assert!(Vad::new(1.5, 300, 0.15).is_err());
+        assert!(Vad::new(-0.1, 300, 0.15).is_err());
     }
 
     #[test]
     fn test_vad_silence() {
-        let mut vad = Vad::new(0.5).unwrap();
+        let mut vad = Vad::new(0.5, 300, 0.15).unwrap();
         let silence = vec![0.0f32; 512];
 
         for _ in 0..20 {
@@ -262,7 +262,7 @@ mod tests {
 
     #[test]
     fn test_vad_reset() {
-        let mut vad = Vad::new(0.5).unwrap();
+        let mut vad = Vad::new(0.5, 300, 0.15).unwrap();
         let silence = vec![0.0f32; 512];
 
         // Process some audio

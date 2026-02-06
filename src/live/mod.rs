@@ -47,12 +47,21 @@ pub enum TranscriptionEvent {
     SpeechEnd,
 }
 
+/// Default minimum silence duration (ms) before speech-end is confirmed.
+pub const MIN_SILENCE_MS: u32 = 300;
+
+/// Default offset below the VAD threshold for the negative (speech-end) trigger.
+pub const NEG_THRESHOLD_OFFSET: f32 = 0.15;
+
 /// Builder for configuring LiveTranscriber.
 pub struct LiveTranscriberBuilder {
     model_name: String,
     vad_threshold: f32,
     max_speech_secs: f32,
     min_refresh_secs: f32,
+    lookback_chunks: usize,
+    min_silence_ms: u32,
+    neg_threshold_offset: f32,
 }
 
 impl Default for LiveTranscriberBuilder {
@@ -62,6 +71,9 @@ impl Default for LiveTranscriberBuilder {
             vad_threshold: 0.5,
             max_speech_secs: MAX_SPEECH_SECS,
             min_refresh_secs: MIN_REFRESH_SECS,
+            lookback_chunks: LOOKBACK_CHUNKS,
+            min_silence_ms: MIN_SILENCE_MS,
+            neg_threshold_offset: NEG_THRESHOLD_OFFSET,
         }
     }
 }
@@ -91,6 +103,24 @@ impl LiveTranscriberBuilder {
         self
     }
 
+    /// Sets the number of audio chunks kept before speech onset.
+    pub fn lookback_chunks(mut self, chunks: usize) -> Self {
+        self.lookback_chunks = chunks;
+        self
+    }
+
+    /// Sets the minimum silence duration (ms) before speech-end is confirmed.
+    pub fn min_silence_ms(mut self, ms: u32) -> Self {
+        self.min_silence_ms = ms;
+        self
+    }
+
+    /// Sets the offset below the VAD threshold for the negative trigger.
+    pub fn neg_threshold_offset(mut self, offset: f32) -> Self {
+        self.neg_threshold_offset = offset;
+        self
+    }
+
     /// Builds the LiveTranscriber.
     pub fn build(self) -> Result<LiveTranscriber> {
         LiveTranscriber::new(
@@ -98,6 +128,9 @@ impl LiveTranscriberBuilder {
             self.vad_threshold,
             self.max_speech_secs,
             self.min_refresh_secs,
+            self.lookback_chunks,
+            self.min_silence_ms,
+            self.neg_threshold_offset,
         )
     }
 }
@@ -109,6 +142,9 @@ pub struct LiveTranscriber {
     vad_threshold: f32,
     max_speech_secs: f32,
     min_refresh_secs: f32,
+    lookback_chunks: usize,
+    min_silence_ms: u32,
+    neg_threshold_offset: f32,
 }
 
 impl LiveTranscriber {
@@ -123,6 +159,9 @@ impl LiveTranscriber {
         vad_threshold: f32,
         max_speech_secs: f32,
         min_refresh_secs: f32,
+        lookback_chunks: usize,
+        min_silence_ms: u32,
+        neg_threshold_offset: f32,
     ) -> Result<Self> {
         let mut model = MoonshineModel::new(model_name)?;
         let tokenizer = load_tokenizer()?;
@@ -137,6 +176,9 @@ impl LiveTranscriber {
             vad_threshold,
             max_speech_secs,
             min_refresh_secs,
+            lookback_chunks,
+            min_silence_ms,
+            neg_threshold_offset,
         })
     }
 
@@ -165,9 +207,9 @@ impl LiveTranscriber {
 
     fn run_transcription_loop(mut self, tx: Sender<TranscriptionEvent>) -> Result<()> {
         let mut capture = AudioCapture::new(SAMPLE_RATE, CHUNK_SIZE)?;
-        let mut vad = Vad::new(self.vad_threshold)?;
+        let mut vad = Vad::new(self.vad_threshold, self.min_silence_ms, self.neg_threshold_offset)?;
 
-        let lookback_size = LOOKBACK_CHUNKS * CHUNK_SIZE;
+        let lookback_size = self.lookback_chunks * CHUNK_SIZE;
         let mut speech: Vec<f32> = Vec::new();
         let mut recording = false;
         let mut start_time = Instant::now();
