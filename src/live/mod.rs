@@ -249,6 +249,7 @@ impl LiveTranscriber {
                         let _ = tx.send(TranscriptionEvent::Final(text));
                         let _ = tx.send(TranscriptionEvent::SpeechEnd);
                         speech.clear();
+                        vad.reset();
                     }
                 }
                 VadEvent::None => {
